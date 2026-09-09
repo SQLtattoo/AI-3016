@@ -1,0 +1,3 @@
+# Optional: For notebook/local exploration outside the class demo flow
+jupyter>=1.0.0
+matplotlib>=3.5.0

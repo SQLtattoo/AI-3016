@@ -1,0 +1,30 @@
+### **Document 2: investment_products.txt**
+```
+FIRST NATIONAL BANK - INVESTMENT PRODUCTS
+
+CERTIFICATES OF DEPOSIT (CDs):
+- Terms: 3, 6, 12, 24, 36 months
+- Minimum deposit: $1,000
+- Current rates: 3.5% - 4.2% APY
+- Early withdrawal penalties apply
+- Automatic renewal unless instructed otherwise
+
+MONEY MARKET ACCOUNTS:
+- Minimum balance: $2,500
+- Current rate: 3.8% APY
+- Limited to 6 withdrawals per month
+- Debit card access available
+- Check writing privileges included
+
+SAVINGS ACCOUNTS:
+- Standard Savings: 0.5% APY, $100 minimum
+- High-Yield Savings: 3.2% APY, $1,000 minimum
+- Youth Savings: 2.0% APY, no minimum (under 18)
+- No monthly fees with minimum balance maintained
+
+RETIREMENT ACCOUNTS:
+- Traditional IRA: Tax-deferred growth
+- Roth IRA: Tax-free withdrawals in retirement
+- 401(k) rollover services available
+- Professional investment advisory services
+- Annual contribution limits: $6,500 (under 50), $7,500 (50+)

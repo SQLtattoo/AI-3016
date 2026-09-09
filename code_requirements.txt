@@ -1,0 +1,29 @@
+# AI-3016 Code-First Demo Requirements
+
+This file specifies the Python dependencies needed for the automated demo scripts.
+Install these in your virtual environment before running the code-first demos.
+
+## Core Azure SDK Dependencies
+azure-search-documents>=11.4.0
+azure-storage-blob>=12.19.0
+azure-identity>=1.15.0
+
+## Azure OpenAI and AI Services
+openai>=1.12.0
+azure-ai-textanalytics>=5.3.0
+
+## Data Processing and Utilities
+numpy>=1.24.0
+pandas>=2.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+## Development and Demo Support
+colorama>=0.4.6
+tqdm>=4.66.0
+rich>=13.7.0
+
+## Optional: For extended demos
+jupyter>=1.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0

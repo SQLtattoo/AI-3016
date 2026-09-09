@@ -1,0 +1,37 @@
+### **Document 3: customer_service.txt**
+```
+FIRST NATIONAL BANK - CUSTOMER SERVICE GUIDE
+
+CONTACT INFORMATION:
+- Customer Service: 1-800-BANK-123
+- Hours: Monday-Friday 7 AM - 7 PM, Saturday 9 AM - 2 PM
+- Online Banking: Available 24/7 at firstnationalbank.com
+- Mobile App: Download from App Store or Google Play
+- Emergency Card Services: 1-800-CARD-911 (24/7)
+
+COMMON ISSUES AND SOLUTIONS:
+
+FORGOTTEN PIN/PASSWORD:
+- Visit any branch with valid ID
+- Call customer service for temporary PIN
+- Use online password reset tool
+- Mobile app biometric setup available
+
+DISPUTED TRANSACTIONS:
+- Report within 60 days of statement date
+- Temporary credit issued during investigation
+- Resolution typically within 10 business days
+- Required documentation varies by transaction type
+
+CARD REPLACEMENT:
+- Lost/stolen cards: Report immediately
+- Damaged cards: Visit branch or request online
+- Expedited shipping available for $25 fee
+- New card activation required within 30 days
+
+ACCOUNT STATEMENTS:
+- Electronic statements: Free, available immediately
+- Paper statements: $3 monthly fee
+- Historical statements: Available online for 7 years
+- Special statement requests: $5 fee per copy
+```
