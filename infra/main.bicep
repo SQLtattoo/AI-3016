@@ -1,4 +1,4 @@
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
 @minLength(1)
 @maxLength(64)
@@ -15,17 +15,37 @@ param environmentName string
 ])
 param location string = 'swedencentral'
 
+@description('Resource group for this azd environment')
+param resourceGroupName string = 'rg-${environmentName}'
+
+@allowed(['Enabled', 'Disabled'])
+param storagePublicNetworkAccess string = 'Enabled'
+
+@allowed(['Enabled', 'Disabled'])
+param keyVaultPublicNetworkAccess string = 'Enabled'
+
+param includePrivateSetup bool = false
+
 @description('Principal ID for RBAC assignments')
 param principalId string = ''
 
-@description('Name of the GPT-4o model deployment')
+@allowed(['User', 'Group', 'ServicePrincipal'])
+param principalType string = 'User'
+
+@description('Name of the chat model deployment')
 param modelDeploymentName string = 'gpt-4o'
 
-@description('Name of the GPT-4o model')
+@description('Name of the chat model')
 param modelName string = 'gpt-4o'
 
-@description('Version of the GPT-4o model')
+@description('Version of the chat model')
 param modelVersion string = '2024-11-20'
+
+@allowed(['Standard', 'GlobalStandard', 'DataZoneStandard'])
+param modelDeploymentSku string = 'GlobalStandard'
+
+@minValue(1)
+param modelDeploymentCapacity int = 10
 
 @description('Name of the embeddings model deployment')
 param embeddingsDeploymentName string = 'text-embedding-ada-002'
@@ -36,25 +56,40 @@ param embeddingsModelName string = 'text-embedding-ada-002'
 @description('Version of the embeddings model')
 param embeddingsModelVersion string = '2'
 
+@allowed(['Standard', 'GlobalStandard', 'DataZoneStandard'])
+param embeddingsDeploymentSku string = 'GlobalStandard'
+
+@minValue(1)
+param embeddingsDeploymentCapacity int = 10
+
 // Generate unique resource names
 var abbrs = loadJsonContent('./abbreviations.json')
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName, 'demo': 'ai3016' }
 
+resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
+  name: resourceGroupName
+  location: location
+  tags: tags
+}
+
 // Storage Account
 module storage './modules/storage.bicep' = {
   name: 'storage-deployment'
+  scope: resourceGroup
   params: {
     name: '${abbrs.storageStorageAccounts}${resourceToken}'
     location: location
     tags: tags
     containerName: 'rag-sources'
+    publicNetworkAccess: storagePublicNetworkAccess
   }
 }
 
 // Foundry Resource (AIServices) with model deployments
 module foundry './modules/openai.bicep' = {
   name: 'foundry-deployment'
+  scope: resourceGroup
   params: {
     name: 'foundry-${resourceToken}'
     location: location
@@ -64,12 +99,12 @@ module foundry './modules/openai.bicep' = {
     deployments: [
       {
         name: modelDeploymentName
-        sku: { name: 'GlobalStandard', capacity: 10 }
+        sku: { name: modelDeploymentSku, capacity: modelDeploymentCapacity }
         model: { format: 'OpenAI', name: modelName, version: modelVersion }
       }
       {
         name: embeddingsDeploymentName
-        sku: { name: 'GlobalStandard', capacity: 10 }
+        sku: { name: embeddingsDeploymentSku, capacity: embeddingsDeploymentCapacity }
         model: { format: 'OpenAI', name: embeddingsModelName, version: embeddingsModelVersion }
       }
     ]
@@ -79,6 +114,7 @@ module foundry './modules/openai.bicep' = {
 // Foundry Project (on top of the Foundry resource)
 module foundryProject './modules/foundry-project.bicep' = {
   name: 'foundry-project-deployment'
+  scope: resourceGroup
   params: {
     name: 'ai3016-project'
     foundryAccountName: foundry.outputs.name
@@ -90,6 +126,7 @@ module foundryProject './modules/foundry-project.bicep' = {
 // AI Search
 module search './modules/search.bicep' = {
   name: 'search-deployment'
+  scope: resourceGroup
   params: {
     name: '${abbrs.searchSearchServices}${resourceToken}'
     location: location
@@ -101,11 +138,13 @@ module search './modules/search.bicep' = {
 // Key Vault for storing secrets
 module keyVault './modules/keyvault.bicep' = {
   name: 'keyvault-deployment'
+  scope: resourceGroup
   params: {
     name: '${abbrs.keyVaultVaults}${resourceToken}'
     location: location
     tags: tags
     sku: 'standard'
+    publicNetworkAccess: keyVaultPublicNetworkAccess
   }
 }
 
@@ -114,8 +153,10 @@ module keyVault './modules/keyvault.bicep' = {
 // Service-to-service roles (Search MI → Storage, Foundry MI → Search) are always assigned.
 module rbac './modules/rbac.bicep' = {
   name: 'rbac-deployment'
+  scope: resourceGroup
   params: {
     principalId: principalId
+    principalType: principalType
     storageAccountName: storage.outputs.name
     searchServiceName: search.outputs.name
     keyVaultName: keyVault.outputs.name
@@ -125,13 +166,31 @@ module rbac './modules/rbac.bicep' = {
     searchPrincipalId: search.outputs.principalId
     // Service-to-service: Foundry managed identity accesses the search index
     foundryPrincipalId: foundry.outputs.principalId
+    projectPrincipalId: foundryProject.outputs.principalId
   }
 }
 
 // Outputs for azd environment
+module privateSetup './modules/private-setup.bicep' = if (includePrivateSetup) {
+  name: 'private-setup-deployment'
+  scope: resourceGroup
+  params: {
+    name: 'demo-private-${resourceToken}'
+    location: location
+    tags: tags
+    storageAccountName: storage.outputs.name
+    keyVaultName: keyVault.outputs.name
+    searchServiceName: search.outputs.name
+    openaiEndpoint: foundry.outputs.endpoint
+    modelDeploymentName: modelDeploymentName
+  }
+}
+
+output AZURE_DEMO_PRIVATE_SETUP_JOB_NAME string = includePrivateSetup ? privateSetup!.outputs.jobName : ''
+output AZURE_DEMO_PRIVATE_SETUP_JOB_ID string = includePrivateSetup ? privateSetup!.outputs.jobResourceId : ''
 output AZURE_LOCATION string = location
 output AZURE_TENANT_ID string = tenant().tenantId
-output AZURE_RESOURCE_GROUP string = resourceGroup().name
+output AZURE_RESOURCE_GROUP string = resourceGroup.name
 
 // Foundry Project outputs
 output AZURE_AI_PROJECT_NAME string = foundryProject.outputs.name

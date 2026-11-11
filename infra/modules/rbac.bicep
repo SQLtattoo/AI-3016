@@ -1,6 +1,9 @@
 @description('Principal ID to assign roles to (user/SP)')
 param principalId string
 
+@allowed(['User', 'Group', 'ServicePrincipal'])
+param principalType string = 'User'
+
 @description('Name of the Storage Account')
 param storageAccountName string
 
@@ -21,6 +24,12 @@ param searchPrincipalId string = ''
 
 @description('System-assigned principal ID of the Foundry / AIServices resource (for Search access)')
 param foundryPrincipalId string = ''
+
+@description('Foundry project managed identity for project tools and model access')
+param projectPrincipalId string = ''
+
+var foundryUserRoleId = '53ca6127-db72-4b80-b1b0-d745d6d5456d'
+var cognitiveServicesUserRoleId = 'a97b65f3-24c7-4388-baec-2e87135dc908'
 
 // Cognitive Services OpenAI User
 var cognitiveServicesOpenAIUserRoleId = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
@@ -66,7 +75,7 @@ resource foundryUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 
@@ -77,7 +86,7 @@ resource openAiEmbeddingsUserRole 'Microsoft.Authorization/roleAssignments@2022-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesOpenAIUserRoleId)
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 
@@ -88,7 +97,7 @@ resource storageBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 
@@ -99,7 +108,7 @@ resource searchIndexRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchIndexDataContributorRoleId)
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 
@@ -110,7 +119,7 @@ resource searchServiceRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', searchServiceContributorRoleId)
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
   }
 }
 
@@ -121,7 +130,37 @@ resource keyVaultSecretsRole 'Microsoft.Authorization/roleAssignments@2022-04-01
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyVaultSecretsOfficerRoleId)
     principalId: principalId
-    principalType: 'User'
+    principalType: principalType
+  }
+}
+
+resource foundryDeveloperRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
+  name: guid(foundryService.id, principalId, foundryUserRoleId)
+  scope: foundryService
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', foundryUserRoleId)
+    principalId: principalId
+    principalType: principalType
+  }
+}
+
+resource languageVoiceUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
+  name: guid(foundryService.id, principalId, cognitiveServicesUserRoleId)
+  scope: foundryService
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', cognitiveServicesUserRoleId)
+    principalId: principalId
+    principalType: principalType
+  }
+}
+
+resource projectRuntimeRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(projectPrincipalId)) {
+  name: guid(foundryService.id, projectPrincipalId, foundryUserRoleId)
+  scope: foundryService
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', foundryUserRoleId)
+    principalId: projectPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 

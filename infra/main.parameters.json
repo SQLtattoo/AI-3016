@@ -11,14 +11,50 @@
     "principalId": {
       "value": "${AZURE_PRINCIPAL_ID}"
     },
+    "principalType": {
+      "value": "${AZURE_PRINCIPAL_TYPE=User}"
+    },
+    "resourceGroupName": {
+      "value": "${AZURE_RESOURCE_GROUP}"
+    },
+    "storagePublicNetworkAccess": {
+      "value": "${AZURE_STORAGE_PUBLIC_NETWORK_ACCESS=Enabled}"
+    },
+    "keyVaultPublicNetworkAccess": {
+      "value": "${AZURE_KEY_VAULT_PUBLIC_NETWORK_ACCESS=Enabled}"
+    },
+    "includePrivateSetup": {
+      "value": "${AZURE_DEMO_PRIVATE_SETUP=false}"
+    },
     "modelDeploymentName": {
-      "value": "gpt-4o"
+      "value": "${AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o}"
     },
     "modelName": {
-      "value": "gpt-4o"
+      "value": "${AZURE_OPENAI_MODEL_NAME=gpt-4o}"
     },
     "modelVersion": {
-      "value": "2024-11-20"
+      "value": "${AZURE_OPENAI_MODEL_VERSION=2024-11-20}"
+    },
+    "modelDeploymentSku": {
+      "value": "${AZURE_OPENAI_DEPLOYMENT_SKU=GlobalStandard}"
+    },
+    "modelDeploymentCapacity": {
+      "value": "${AZURE_OPENAI_DEPLOYMENT_CAPACITY=10}"
+    },
+    "embeddingsDeploymentName": {
+      "value": "${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT_NAME=text-embedding-ada-002}"
+    },
+    "embeddingsModelName": {
+      "value": "${AZURE_OPENAI_EMBEDDINGS_MODEL_NAME=text-embedding-ada-002}"
+    },
+    "embeddingsModelVersion": {
+      "value": "${AZURE_OPENAI_EMBEDDINGS_MODEL_VERSION=2}"
+    },
+    "embeddingsDeploymentSku": {
+      "value": "${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT_SKU=GlobalStandard}"
+    },
+    "embeddingsDeploymentCapacity": {
+      "value": "${AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT_CAPACITY=10}"
     }
   }
 }

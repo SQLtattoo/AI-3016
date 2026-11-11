@@ -41,6 +41,7 @@ resource cognitiveService 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
       defaultAction: 'Allow'
     }
     allowProjectManagement: allowProjectManagement
+    disableLocalAuth: true
   }
 }
 

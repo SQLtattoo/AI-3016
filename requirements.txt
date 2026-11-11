@@ -2,18 +2,19 @@
 
 # Core Azure AI packages
 azure-ai-inference>=1.0.0b1
-azure-ai-projects>=1.0.0b1
+azure-ai-projects>=2.0.0
 
-# Azure Search
-azure-search-documents>=11.4.0
+# Azure Search and RAG source storage
+azure-search-documents>=12.0.0
+azure-storage-blob>=12.19.0
 
 # Azure Identity and Core
 azure-identity>=1.12.0
 azure-core>=1.28.0
 azure-keyvault-secrets>=4.8.0
 
-# OpenAI SDK (required by Microsoft Foundry SDK)
-openai>=1.0.0
+# OpenAI SDK (Responses API hosted tools)
+openai>=1.109.0
 
 # Data processing
 numpy>=1.21.0

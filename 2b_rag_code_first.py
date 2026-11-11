@@ -584,18 +584,15 @@ Source: First National Bank - Customer Service Guide"""
     
     def demonstrate_rag_api_approach(self):
         """
-        Demonstrate Azure OpenAI RAG API (as shown in Azure documentation).
-        
-        This shows the simplified approach where Azure OpenAI handles the RAG
-        integration automatically, compared to our manual implementation above.
+        Explain the supported replacement for the retired On Your Data API.
         """
-        logger.info("🚀 Demonstrating Azure OpenAI RAG API approach...")
+        logger.info("Azure OpenAI On Your Data is retired. Use application-managed Search grounding.")
         
         logger.info("\n   📋 RAG API Implementation Steps:")
         api_steps = [
             "1. Index documents in an Azure AI Search index",
             "2. Create an OpenAI SDK client for the Azure OpenAI endpoint",
-            "3. Include Azure AI Search data-source details in Chat Completions calls"
+            "3. Retrieve Search evidence and pass it as context to Chat Completions"
         ]
         
         for step in api_steps:
@@ -603,35 +600,15 @@ Source: First National Bank - Customer Service Guide"""
         
         logger.info("\n   💻 Code Example (RAG API approach):")
         logger.info("""
-        # Azure OpenAI RAG API approach
-        from openai import AzureOpenAI
-        
-        client = AzureOpenAI(
-            azure_endpoint="your-endpoint",
-            api_key="your-key",
-            api_version="2024-05-01-preview"
-        )
-        
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": "What are your CD rates?"}],
-            extra_body={
-                "data_sources": [{
-                    "type": "azure_search",
-                    "parameters": {
-                        "endpoint": "your-search-endpoint",
-                        "index_name": "banking-docs-index",
-                        "authentication": {"type": "api_key", "key": "search-key"},
-                        "top_n_documents": 5,
-                        "in_scope": True,
-                        "role_information": "You are a banking assistant"
-                    }
-                }]
-            }
-        )
+        from azure_openai_auth import create_azure_openai_client
+        from rag_grounding import answer_with_search
+
+        with create_azure_openai_client() as client:
+            answer, sources = answer_with_search(client, "What are your CD rates?")
+            print(answer, sources)
         """)
         
-        logger.info("\n   🔄 Comparison: Manual RAG vs RAG API")
+        logger.info("\nHistorical comparison only: the managed On Your Data API is retired.")
         comparison = [
             ("Control", "Manual: Full control over search and generation", "API: Azure handles integration automatically"),
             ("Complexity", "Manual: More code, more customization", "API: Simpler, less code required"),
@@ -646,7 +623,7 @@ Source: First National Bank - Customer Service Guide"""
             logger.info(f"         • {manual}")
             logger.info(f"         • {api}")
         
-        self._add_demo_step("RAG API approach", "✅ API approach comparison demonstrated")
+        self._add_demo_step("RAG API migration", "Supported Search SDK grounding replacement explained")
 
     def explain_production_architecture(self):
         """

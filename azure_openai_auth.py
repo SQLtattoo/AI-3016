@@ -23,6 +23,13 @@ def has_usable_secret(value: str) -> bool:
     return not any(marker in value for marker in placeholders)
 
 
+def normalize_project_endpoint(endpoint: str) -> str:
+    endpoint = endpoint.replace(".cognitiveservices.azure.com", ".services.ai.azure.com")
+    if "/api/projects/" not in endpoint:
+        endpoint = endpoint.replace("/projects/", "/api/projects/")
+    return endpoint
+
+
 def create_azure_openai_client(
     endpoint_env: str = "AZURE_OPENAI_ENDPOINT",
     key_env: str = "AZURE_OPENAI_API_KEY",

@@ -9,14 +9,13 @@ import sys
 
 from azure.identity import DefaultAzureCredential
 from dotenv import load_dotenv
+from azure_openai_auth import normalize_project_endpoint
 
 
 load_dotenv()
 
 PROJECT_ENDPOINT = os.getenv("AZURE_AI_PROJECT_ENDPOINT", "").strip().strip('"')
-PROJECT_ENDPOINT = PROJECT_ENDPOINT.replace(
-    ".cognitiveservices.azure.com", ".services.ai.azure.com"
-).replace("/projects/", "/api/projects/")
+PROJECT_ENDPOINT = normalize_project_endpoint(PROJECT_ENDPOINT)
 CHAT_DEPLOYMENT = os.getenv("DEPLOYMENT_NAME", "gpt-4o").strip().strip('"')
 
 SYSTEM_PROMPT = (

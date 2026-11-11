@@ -1,250 +1,230 @@
 #!/usr/bin/env python3
-"""
-Setup Azure AI Search Index for RAG Demo
-Creates the rag-bank-documents index and populates it with documents from blob storage.
-"""
+"""Create, populate, and verify the Azure AI Search index used by the demos."""
 
+import math
 import os
-from dotenv import load_dotenv
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import AzureError, HttpResponseError, ResourceNotFoundError
+from azure.identity import AzureCliCredential
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
-    SearchIndex, SearchField, SearchFieldDataType,
-    SimpleField, SearchableField, VectorSearch,
-    VectorSearchProfile, HnswAlgorithmConfiguration
+    HnswAlgorithmConfiguration,
+    SearchableField,
+    SearchField,
+    SearchFieldDataType,
+    SearchIndex,
+    SimpleField,
+    VectorSearch,
+    VectorSearchProfile,
 )
-from azure.core.credentials import AzureKeyCredential
+from azure.search.documents.models import VectorizedQuery
 from azure.storage.blob import BlobServiceClient
-from azure_openai_auth import create_azure_openai_client
+from dotenv import load_dotenv
+from openai import OpenAIError, PermissionDeniedError
 
-load_dotenv()
+from azure_openai_auth import clean_env_value, create_azure_openai_client, has_usable_secret
 
-def create_search_index():
-    """Create the Azure AI Search index with vector search capabilities."""
-    print("📊 Creating Azure AI Search index...")
-    
-    search_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-    search_key = os.getenv("AZURE_SEARCH_ADMIN_KEY")
-    index_name = os.getenv("AZURE_SEARCH_INDEX", "rag-bank-documents")
-    
-    if not search_endpoint or not search_key:
-        print("❌ Missing Azure Search credentials in .env")
-        return None, None
-    
-    credential = AzureKeyCredential(search_key)
-    index_client = SearchIndexClient(endpoint=search_endpoint, credential=credential)
-    
-    # Define index schema
+
+ROOT = Path(__file__).resolve().parent
+SOURCE_DIRECTORY = ROOT / "RAG-sources"
+REQUIRED_SOURCES = {"bank_policies.txt", "customer_service.txt", "investment_products.txt"}
+EMBEDDING_DIMENSIONS = 1536
+load_dotenv(ROOT / ".env")
+
+
+def create_search_index() -> tuple[SearchClient, SearchIndexClient]:
+    endpoint = clean_env_value("AZURE_SEARCH_ENDPOINT")
+    key = clean_env_value("AZURE_SEARCH_ADMIN_KEY")
+    if not endpoint or not has_usable_secret(key):
+        raise ValueError("Set AZURE_SEARCH_ENDPOINT and a valid AZURE_SEARCH_ADMIN_KEY.")
+
+    name = clean_env_value("AZURE_SEARCH_INDEX", "rag-bank-documents")
+    credential = AzureKeyCredential(key)
+    index_client = SearchIndexClient(endpoint=endpoint, credential=credential)
     fields = [
         SimpleField(name="id", type=SearchFieldDataType.String, key=True),
         SearchableField(name="title", type=SearchFieldDataType.String, analyzer_name="en.microsoft"),
         SearchableField(name="content", type=SearchFieldDataType.String, analyzer_name="en.microsoft"),
         SimpleField(name="category", type=SearchFieldDataType.String, filterable=True, facetable=True),
-        SearchableField(name="keywords", type=SearchFieldDataType.Collection(SearchFieldDataType.String)),
+        SearchableField(name="keywords", type=SearchFieldDataType.String),
         SearchField(
             name="content_vector",
             type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
             searchable=True,
-            vector_search_dimensions=1536,  # text-embedding-ada-002
-            vector_search_profile_name="rag-vector-profile"
-        )
+            retrievable=True,
+            vector_search_dimensions=EMBEDDING_DIMENSIONS,
+            vector_search_profile_name="rag-vector-profile",
+        ),
     ]
-    
-    # Configure vector search
     vector_search = VectorSearch(
-        profiles=[
-            VectorSearchProfile(
-                name="rag-vector-profile",
-                algorithm_configuration_name="rag-algorithm-config"
-            )
-        ],
-        algorithms=[
-            HnswAlgorithmConfiguration(name="rag-algorithm-config")
-        ]
+        profiles=[VectorSearchProfile(name="rag-vector-profile", algorithm_configuration_name="rag-algorithm-config")],
+        algorithms=[HnswAlgorithmConfiguration(name="rag-algorithm-config")],
     )
-    
-    # Create the index
-    index = SearchIndex(name=index_name, fields=fields, vector_search=vector_search)
-    
-    try:
-        result = index_client.create_or_update_index(index)
-        print(f"✅ Index created: {result.name}")
-        
-        # Return search client for document upload
-        search_client = SearchClient(endpoint=search_endpoint, index_name=index_name, credential=credential)
-        return search_client, index_client
-    except Exception as e:
-        print(f"❌ Failed to create index: {str(e)}")
-        return None, None
+    index_client.create_or_update_index(
+        SearchIndex(name=name, fields=fields, vector_search=vector_search)
+    )
+    print(f"Search index created or updated: {name}")
+    return SearchClient(endpoint=endpoint, index_name=name, credential=credential), index_client
 
-def get_documents_from_storage():
-    """Read documents from Azure Storage blob container."""
-    print("📥 Reading documents from Azure Storage...")
-    
-    storage_account = os.getenv("AZURE_STORAGE_ACCOUNT_NAME")
-    container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "rag-sources")
-    storage_endpoint = os.getenv("AZURE_STORAGE_ENDPOINT")
-    
-    if not storage_account or not storage_endpoint:
-        print("❌ Missing storage configuration in .env")
+
+def source_document(filename: str, content: str) -> dict[str, Any]:
+    if not content.strip():
+        raise ValueError(f"RAG source is empty: {filename}")
+    return {
+        "id": filename.removesuffix(".txt").replace("_", "-"),
+        "title": filename.removesuffix(".txt").replace("_", " ").title(),
+        "content": content,
+        "category": "banking",
+        "keywords": "",
+    }
+
+
+def get_documents_from_local_sources() -> list[dict[str, Any]]:
+    files = sorted(SOURCE_DIRECTORY.glob("*.txt"))
+    missing = REQUIRED_SOURCES - {path.name for path in files}
+    if missing:
+        raise ValueError(f"Missing required RAG sources: {', '.join(sorted(missing))}")
+    return [source_document(path.name, path.read_text(encoding="utf-8")) for path in files]
+
+
+def get_documents_from_storage() -> list[dict[str, Any]]:
+    endpoint = clean_env_value("AZURE_STORAGE_ENDPOINT")
+    if not endpoint:
+        print("Storage endpoint is not configured; using local RAG-sources.")
         return []
-    
     try:
-        # Use AzureCliCredential for authentication (simpler, uses 'az login')
-        from azure.identity import AzureCliCredential
-        credential = AzureCliCredential()
-        
-        blob_service_client = BlobServiceClient(
-            account_url=storage_endpoint,
-            credential=credential
+        with AzureCliCredential() as credential, BlobServiceClient(
+            account_url=endpoint, credential=credential
+        ) as service:
+            container = service.get_container_client(
+                clean_env_value("AZURE_STORAGE_CONTAINER_NAME", "rag-sources")
+            )
+            return [
+                source_document(blob.name, container.download_blob(blob.name).readall().decode("utf-8"))
+                for blob in container.list_blobs()
+                if blob.name.endswith(".txt")
+            ]
+    except HttpResponseError as exc:
+        if exc.status_code not in (403, 404):
+            raise
+        print(
+            f"WARNING: Storage read returned HTTP {exc.status_code}; using local "
+            "RAG-sources. Local blob access is not verified by this fallback."
         )
-        
-        container_client = blob_service_client.get_container_client(container_name)
-        
-        documents = []
-        blob_list = container_client.list_blobs()
-        
-        for blob in blob_list:
-            if blob.name.endswith('.txt'):
-                blob_client = container_client.get_blob_client(blob.name)
-                content = blob_client.download_blob().readall().decode('utf-8')
-                
-                # Create document structure
-                doc_id = blob.name.replace('.txt', '').replace('_', '-')
-                doc = {
-                    'id': doc_id,
-                    'title': blob.name.replace('_', ' ').replace('.txt', '').title(),
-                    'content': content,
-                    'category': 'banking',
-                    'keywords': []
-                }
-                documents.append(doc)
-                print(f"   ✅ Read: {blob.name}")
-        
-        print(f"✅ Found {len(documents)} documents in storage")
-        return documents
-        
-    except Exception as e:
-        print(f"❌ Failed to read from storage: {str(e)}")
         return []
 
-def get_documents_from_local_sources():
-    """Read documents from the local RAG-sources folder."""
-    print("📥 Reading documents from local RAG-sources folder...")
 
-    sources_path = os.path.join(os.path.dirname(__file__), "RAG-sources")
-    if not os.path.isdir(sources_path):
-        print(f"❌ Local RAG-sources folder not found: {sources_path}")
-        return []
-
-    documents = []
-    for filename in sorted(os.listdir(sources_path)):
-        if not filename.endswith(".txt"):
-            continue
-
-        file_path = os.path.join(sources_path, filename)
-        with open(file_path, "r", encoding="utf-8") as source_file:
-            content = source_file.read()
-
-        documents.append({
-            "id": filename.replace(".txt", "").replace("_", "-"),
-            "title": filename.replace("_", " ").replace(".txt", "").title(),
-            "content": content,
-            "category": "banking",
-            "keywords": []
-        })
-        print(f"   ✅ Read: {filename}")
-
-    print(f"✅ Found {len(documents)} local documents")
-    return documents
-
-def generate_embeddings(text, openai_client, deployment_name):
-    """Generate vector embeddings for text."""
-    try:
-        response = openai_client.embeddings.create(
-            model=deployment_name,
-            input=text[:8000]  # Limit to avoid token limits
+def validate_embedding(embedding: list[float]) -> None:
+    if (
+        len(embedding) != EMBEDDING_DIMENSIONS
+        or not all(
+            isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+            for value in embedding
         )
-        return response.data[0].embedding
-    except Exception as e:
-        print(f"⚠️  Failed to generate embedding: {str(e)}")
-        return None
+        or not any(embedding)
+    ):
+        raise ValueError(
+            f"Expected a finite, nonzero {EMBEDDING_DIMENSIONS}-dimension embedding. "
+            "Choose a compatible embedding model; do not reuse an incompatible index."
+        )
 
-def upload_documents(search_client, documents):
-    """Upload documents with embeddings to search index."""
-    print("📤 Uploading documents to search index...")
-    
-    # Initialize OpenAI client for embeddings - supports API key or Microsoft Entra ID
-    embeddings_deployment = os.getenv("AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT_NAME", "text-embedding-ada-002")
 
-    print(f"   Using embeddings deployment: {embeddings_deployment}")
-    
-    try:
-        openai_client = create_azure_openai_client(api_version="2024-05-01-preview")
-        
-        documents_to_upload = []
-        
-        for doc in documents:
-            print(f"   Processing: {doc['title']}")
-            
-            # Generate embedding
-            embedding = generate_embeddings(doc['content'], openai_client, embeddings_deployment)
-            
-            if embedding:
-                search_doc = {
-                    "id": doc["id"],
-                    "title": doc["title"],
-                    "content": doc["content"],
-                    "category": doc["category"],
-                    "content_vector": embedding
-                }
-                documents_to_upload.append(search_doc)
-                print(f"      ✅ Embedding generated ({len(embedding)} dims)")
-            else:
-                print(f"      ⚠️  Skipping (no embedding)")
-        
-        if documents_to_upload:
-            result = search_client.upload_documents(documents_to_upload)
-            success_count = sum(1 for r in result if r.succeeded)
-            print(f"✅ Uploaded {success_count}/{len(documents_to_upload)} documents to index")
-            return True
-        else:
-            print("❌ No documents to upload")
-            return False
-            
-    except Exception as e:
-        print(f"❌ Failed to upload documents: {str(e)}")
-        return False
+def generate_embeddings(text: str, openai_client: Any, deployment_name: str) -> list[float]:
+    for attempt in range(12):
+        try:
+            embedding = openai_client.embeddings.create(
+                model=deployment_name, input=text[:8000]
+            ).data[0].embedding
+            break
+        except PermissionDeniedError:
+            if attempt == 11:
+                raise
+            print(f"Embeddings returned HTTP 403; waiting for new RBAC assignments ({attempt + 1}/12).")
+            time.sleep(10)
+    validate_embedding(embedding)
+    return embedding
 
-def main():
-    """Main setup function."""
-    print("🚀 Azure AI Search Index Setup for RAG Demo")
-    print("=" * 50)
-    
-    # Step 1: Create search index
-    search_client, index_client = create_search_index()
-    if not search_client:
-        print("\n❌ Setup failed at index creation")
-        return
-    
-    # Step 2: Get documents from storage
-    documents = get_documents_from_storage()
+
+def upload_documents(search_client: SearchClient, documents: list[dict[str, Any]]) -> bool:
     if not documents:
-        print("\n⚠️  No documents found in storage; falling back to local RAG-sources")
-        documents = get_documents_from_local_sources()
-        if not documents:
-            print("\n❌ No documents found for indexing")
+        raise ValueError("No RAG documents were supplied for indexing.")
+    deployment = clean_env_value(
+        "AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT_NAME", "text-embedding-ada-002"
+    )
+    with create_azure_openai_client() as client:
+        indexed = [
+            {**doc, "content_vector": generate_embeddings(doc["content"], client, deployment)}
+            for doc in documents
+        ]
+    results = search_client.upload_documents(indexed)
+    failures = [f"{result.key}: {result.error_message}" for result in results if not result.succeeded]
+    if failures or {result.key for result in results} != {doc["id"] for doc in documents}:
+        raise RuntimeError(f"Incomplete Search upload: {'; '.join(failures) or 'missing document results'}")
+    print(f"Uploaded all {len(indexed)} documents with {EMBEDDING_DIMENSIONS}-dimension embeddings.")
+    return True
+
+
+def verify_search_index(
+    search_client: SearchClient,
+    documents: list[dict[str, Any]],
+    attempts: int = 12,
+    delay: float = 5,
+) -> None:
+    if not documents or attempts < 1:
+        raise ValueError("Verification needs source documents and at least one attempt.")
+    problem = ""
+    for attempt in range(attempts):
+        try:
+            for expected in documents:
+                stored = search_client.get_document(expected["id"])
+                if stored.get("content") != expected["content"] or stored.get("title") != expected["title"]:
+                    raise RuntimeError(f"Missing or stale indexed content: {expected['id']}")
+                embedding = stored.get("content_vector", [])
+                validate_embedding(embedding)
+                hits = list(search_client.search(
+                    vector_queries=[VectorizedQuery(
+                        vector=embedding, k_nearest_neighbors=1, fields="content_vector"
+                    )],
+                    select=["id"],
+                    top=1,
+                ))
+                if not hits or hits[0]["id"] != expected["id"]:
+                    raise RuntimeError(f"Vector retrieval did not find {expected['id']}")
+            print(f"Verified content, embeddings, and vector retrieval for all {len(documents)} source documents.")
             return
-    
-    # Step 3: Upload documents with embeddings
-    if upload_documents(search_client, documents):
-        print("\n🎉 Search index setup complete!")
-        print(f"\nYour index '{os.getenv('AZURE_SEARCH_INDEX', 'rag-bank-documents')}' is ready.")
-        print("\nNext steps:")
-        print("  1. Run: python 2c_rag_api_demo.py")
-        print("  2. Run: python 3_chat_client_demo.py")
-    else:
-        print("\n❌ Setup failed at document upload")
+        except (ResourceNotFoundError, RuntimeError, ValueError) as exc:
+            problem = str(exc)
+            if attempt + 1 < attempts:
+                print(f"Waiting for Search index visibility ({attempt + 1}/{attempts}): {problem}")
+                time.sleep(delay)
+    raise RuntimeError(f"Search index is not ready after {attempts} checks: {problem}")
+
+
+def main() -> int:
+    try:
+        local_documents = get_documents_from_local_sources()
+        stored_documents = get_documents_from_storage()
+        local_content = {doc["id"]: doc["content"] for doc in local_documents}
+        stored_content = {doc["id"]: doc["content"] for doc in stored_documents}
+        if stored_content != local_content:
+            print("Storage sources are absent or differ from the repository; indexing local RAG-sources.")
+        documents = stored_documents if stored_content == local_content else local_documents
+        search_client, index_client = create_search_index()
+        with search_client, index_client:
+            upload_documents(search_client, documents)
+            verify_search_index(search_client, documents)
+        print("RAG index setup complete.")
+        return 0
+    except (AzureError, OpenAIError, OSError, RuntimeError, ValueError) as exc:
+        print(f"RAG index setup FAILED: {exc}", file=sys.stderr)
+        return 1
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

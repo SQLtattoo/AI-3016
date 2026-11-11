@@ -27,6 +27,9 @@ Foundry Agent -> grounded answer with citations
 
 This replaces the retired model-playground data-source attachment workflow.
 
+> [!IMPORTANT]
+> `azd up` prepares the Search index and service identities, but does not create Foundry IQ Knowledge or a portal agent. Complete those steps manually below. `check_demo_readiness.py` verifies the Python demo paths, not this portal integration. Knowledge and agent requests can incur additional Azure charges; confirm feature availability and permissions in your selected region before presenting.
+
 ### Learning Objectives
 
 - Explain the difference between an index, a Foundry IQ Knowledge object, and an agent.
@@ -37,17 +40,19 @@ This replaces the retired model-playground data-source attachment workflow.
 
 ---
 
-## Validated Demo Resources
+## Demo Resources
 
 | Resource | Value |
 |---|---|
-| Resource group | Value of `AZURE_RESOURCE_GROUP` from `azd env get-values` |
-| Foundry account | Value of `AZURE_FOUNDRY_SERVICE_NAME` from `azd env get-values` |
+| Resource group | `azd env get-value AZURE_RESOURCE_GROUP` |
+| Foundry account | `azd env get-value AZURE_FOUNDRY_SERVICE_NAME` |
 | Foundry project | `ai3016-project` |
-| Azure AI Search | Value of `AZURE_SEARCH_SERVICE_NAME` from `azd env get-values` |
+| Azure AI Search | `azd env get-value AZURE_SEARCH_SERVICE_NAME` |
 | Search index | `rag-bank-documents` |
 | Indexed documents | 3 |
 | Chat deployment | `gpt-4o` |
+
+These commands print only the named, non-secret resource value. Do not share raw `.env` or `azd env get-values` output.
 
 The index contains:
 
@@ -92,7 +97,7 @@ Run this only if the index is missing or needs to be rebuilt:
 python .\setup_search_index.py
 ```
 
-Expected result: `rag-bank-documents` is ready and contains all three documents. The script can use local `RAG-sources` when Blob Storage data-plane access is blocked by policy.
+Expected result: `rag-bank-documents` is ready and contains all three documents. `azd up` already performs this setup. The script can use local `RAG-sources` when Blob Storage data-plane access is blocked by policy; that fallback does not verify private Blob Storage access.
 
 ### 4. Confirm the Critical RBAC Assignment
 
@@ -275,11 +280,9 @@ Grounded response with source references
 
 ### `403 Access denied` while enumerating MCP tools
 
-This was encountered and fixed in the deployed class environment.
-
 Cause: Search roles were assigned to the parent Foundry account identity, but the MCP project connection used the separate Foundry **project managed identity**.
 
-Fix:
+The current infrastructure assigns the project identity Search data-plane access. For an older or manually configured environment, verify or fix the assignment:
 
 1. Open the Azure AI Search service named by `AZURE_SEARCH_SERVICE_NAME`.
 2. Select **Access control (IAM)**.
@@ -310,9 +313,11 @@ If the Knowledge object uses an LLM, assign **Cognitive Services User** on the p
 
 ### Network-related errors
 
-For the validated deployment, public network access is enabled on both Foundry and Search, and Search has no IP firewall rules. A generic `403` is therefore more likely to be RBAC than networking.
+The default template leaves Foundry and Search publicly reachable. Check the actual environment's network settings and RBAC rather than assuming every `403` has the same cause.
 
 If policy later disables public access, use an end-to-end private network design with private endpoints, private DNS, and a supported route from hosted Foundry Agent Service to Search. Changing only one service to private access breaks the MCP call.
+
+The optional `AZURE_DEMO_PRIVATE_SETUP` job verifies private Storage and Key Vault access only. It does not configure a private Foundry-to-Search route or give your laptop VNet access.
 
 ---
 
@@ -347,4 +352,4 @@ If policy later disables public access, use an end-to-end private network design
 
 ---
 
-**Validated class path:** existing Search index -> Foundry IQ Knowledge -> Agent Knowledge attachment -> Agent Playground grounded response.
+**Portal path to verify before class:** existing Search index -> Foundry IQ Knowledge -> Agent Knowledge attachment -> Agent Playground grounded response.

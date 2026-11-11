@@ -31,3 +31,4 @@ resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-07-0
 output id string = foundryProject.id
 output name string = foundryProject.name
 output endpoint string = 'https://${foundryAccountName}.services.ai.azure.com/api/projects/${foundryProject.name}'
+output principalId string = foundryProject.identity.principalId

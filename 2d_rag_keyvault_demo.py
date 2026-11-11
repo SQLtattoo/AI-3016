@@ -22,6 +22,7 @@ Usage:
 
 import os
 from dotenv import load_dotenv
+from rag_grounding import answer_with_search
 from azure.identity import AzureCliCredential
 from azure.core.exceptions import HttpResponseError
 from azure.keyvault.secrets import SecretClient
@@ -48,8 +49,6 @@ def get_secrets_from_keyvault():
         
         # Retrieve secrets
         secrets = {
-            "foundry_api_key": client.get_secret("AZURE-AI-FOUNDRY-API-KEY").value,
-            "openai_api_key": client.get_secret("AZURE-OPENAI-API-KEY").value,
             "search_admin_key": client.get_secret("AZURE-SEARCH-ADMIN-KEY").value,
             "endpoint_url": client.get_secret("ENDPOINT-URL").value,
             "openai_endpoint": client.get_secret("AZURE-OPENAI-ENDPOINT").value,
@@ -91,7 +90,6 @@ def demonstrate_rag_with_keyvault():
         search_key = os.getenv("AZURE_SEARCH_ADMIN_KEY", "").strip('"')
         security_mode = ".env fallback + Microsoft Entra ID"
     
-    deployment_name = os.getenv("DEPLOYMENT_NAME", "gpt-4o").strip('"')
     search_index = os.getenv("AZURE_SEARCH_INDEX", "rag-bank-documents")
     
     # Initialize client
@@ -114,43 +112,14 @@ def demonstrate_rag_with_keyvault():
     for question in questions:
         print(f"\n❓ {question}")
         
-        try:
-            response = client.chat.completions.create(
-                model=deployment_name,
-                messages=[
-                    {"role": "system", "content": "You are a helpful banking assistant."},
-                    {"role": "user", "content": question}
-                ],
-                extra_body={
-                    "data_sources": [{
-                        "type": "azure_search",
-                        "parameters": {
-                            "endpoint": search_endpoint,
-                            "index_name": search_index,
-                            "authentication": {
-                                "type": "api_key",
-                                "key": search_key
-                            },
-                            "top_n_documents": 3,
-                            "in_scope": True,
-                            "strictness": 3
-                        }
-                    }]
-                }
-            )
-            
-            print(f"🤖 {response.choices[0].message.content}")
-            
-            # Show sources if available
-            if hasattr(response.choices[0].message, 'context'):
-                citations = response.choices[0].message.context.get('citations', [])
-                if citations:
-                    print("📚 Sources:")
-                    for citation in citations:
-                        print(f"   • {citation.get('title', 'Document')}")
-            
-        except Exception as e:
-            print(f"❌ Error: {e}")
+        answer, sources = answer_with_search(
+            client, question,
+            search_endpoint=search_endpoint,
+            search_key=search_key,
+            index_name=search_index,
+        )
+        print(f"🤖 {answer}")
+        print(f"📚 Retrieved sources: {', '.join(sources)}")
         
         print("-" * 60)
 

@@ -157,7 +157,7 @@ class AgenticRagDemo:
         }
         return tool_map[name](**arguments)
 
-    def run(self, question: str) -> None:
+    def run(self, question: str) -> str:
         print("AI-3016 Demo 5: Application-Orchestrated RAG Tool Workflow")
         print("=" * 60)
         print(f"Customer: {question}\n")
@@ -196,8 +196,12 @@ class AgenticRagDemo:
             temperature=0.2,
             max_tokens=700,
         )
+        answer = response.choices[0].message.content
+        if not answer:
+            raise RuntimeError("The RAG tool workflow returned an empty answer.")
         print("Assistant final answer:")
-        print(response.choices[0].message.content)
+        print(answer)
+        return answer
 
 
 def main() -> None:

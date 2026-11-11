@@ -10,6 +10,9 @@
 
 This guide walks through fine-tuning GPT-4o using the Microsoft Foundry web portal interface. Students will see the complete visual workflow from data upload to model deployment.
 
+> [!IMPORTANT]
+> `azd up` does not start a fine-tuning job or deploy a fine-tuned model. Its readiness check runs only the code-first training dry-run. The training and deployment steps below are separate, billable operations; verify the available fine-tuning model versions, regional support, quota, and pricing first. A chat deployment's availability does not establish fine-tuning availability.
+
 ### **Learning Objectives:**
 - Navigate Microsoft Foundry portal interface
 - Upload and validate training datasets

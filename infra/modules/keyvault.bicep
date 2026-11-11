@@ -9,6 +9,9 @@ param location string = resourceGroup().location
 @description('Tags for the Key Vault')
 param tags object = {}
 
+@allowed(['Enabled', 'Disabled'])
+param publicNetworkAccess string = 'Enabled'
+
 @description('SKU for the Key Vault')
 @allowed([
   'standard'
@@ -32,7 +35,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: publicNetworkAccess
     networkAcls: {
       defaultAction: 'Allow'
       bypass: 'AzureServices'
